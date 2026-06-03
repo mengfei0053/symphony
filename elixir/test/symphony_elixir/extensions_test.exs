@@ -101,6 +101,15 @@ defmodule SymphonyElixir.ExtensionsTest do
     :ok
   end
 
+  setup do
+    web_title = System.get_env("SYMPHONY_WEB_TITLE")
+    System.delete_env("SYMPHONY_WEB_TITLE")
+
+    on_exit(fn -> restore_env("SYMPHONY_WEB_TITLE", web_title) end)
+
+    :ok
+  end
+
   test "workflow store reloads changes, keeps last good workflow, and falls back when stopped" do
     ensure_workflow_store_running()
     assert {:ok, %{prompt: "You are an agent for this repository."}} = Workflow.current()
@@ -548,6 +557,28 @@ defmodule SymphonyElixir.ExtensionsTest do
     assert live_view_js =~ "var LiveView = (() => {"
   end
 
+  test "dashboard title uses environment override and falls back when blank" do
+    orchestrator_name = Module.concat(__MODULE__, :TitleOrchestrator)
+
+    {:ok, _pid} =
+      StaticOrchestrator.start_link(
+        name: orchestrator_name,
+        snapshot: static_snapshot()
+      )
+
+    start_test_endpoint(orchestrator: orchestrator_name, snapshot_timeout_ms: 50)
+
+    System.put_env("SYMPHONY_WEB_TITLE", "  自定义运营中心  ")
+    {:ok, _view, html} = live(build_conn(), "/")
+    assert html =~ "<title>自定义运营中心</title>"
+    assert html =~ "自定义运营中心"
+
+    System.put_env("SYMPHONY_WEB_TITLE", "   ")
+    {:ok, _view, html} = live(build_conn(), "/")
+    assert html =~ "<title>运营仪表盘</title>"
+    assert html =~ "运营仪表盘"
+  end
+
   test "dashboard liveview renders and refreshes over pubsub" do
     orchestrator_name = Module.concat(__MODULE__, :DashboardOrchestrator)
     snapshot = static_snapshot()
@@ -567,17 +598,17 @@ defmodule SymphonyElixir.ExtensionsTest do
     start_test_endpoint(orchestrator: orchestrator_name, snapshot_timeout_ms: 50)
 
     {:ok, view, html} = live(build_conn(), "/")
-    assert html =~ "Operations Dashboard"
+    assert html =~ "运营仪表盘"
     assert html =~ "MT-HTTP"
     assert html =~ "MT-RETRY"
     assert html =~ "MT-BLOCKED"
     assert html =~ "rendered"
     assert html =~ "turn blocked: waiting for user input"
-    assert html =~ "Runtime"
-    assert html =~ "Live"
-    assert html =~ "Offline"
-    assert html =~ "Copy ID"
-    assert html =~ "Codex update"
+    assert html =~ "运行时长"
+    assert html =~ "实时"
+    assert html =~ "离线"
+    assert html =~ "复制 ID"
+    assert html =~ "Codex 更新"
     refute html =~ "data-runtime-clock="
     refute html =~ "setInterval(refreshRuntimeClocks"
     refute html =~ "Refresh now"
@@ -633,7 +664,7 @@ defmodule SymphonyElixir.ExtensionsTest do
     )
 
     {:ok, _view, html} = live(build_conn(), "/")
-    assert html =~ "Snapshot unavailable"
+    assert html =~ "快照不可用"
     assert html =~ "snapshot_unavailable"
   end
 
